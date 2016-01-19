@@ -64,8 +64,15 @@ int selected_x = 0, selected_y = 0, current_sudoku = -1;
 // change grid cell
 static void selection( GtkWidget *widget, gpointer data )
 {
+	GdkColor color;
+	gdk_color_parse( "#999999", &color );
+
+	gtk_widget_modify_bg( sudokuw[selected_x][selected_y], GTK_STATE_PRELIGHT, NULL );
+
 	selected_x = (int)((int*)data)[0];
 	selected_y = (int)((int*)data)[1];
+	
+	gtk_widget_modify_bg( sudokuw[selected_x][selected_y], GTK_STATE_PRELIGHT, &color );
 	#ifdef DEBUG
 	g_print("New selection: %i, %i\n", selected_x, selected_y);
 	#endif
@@ -122,6 +129,9 @@ static void new( GtkWidget *widget, gpointer data )
 	char n[2] = { 0, '\0' };
 	char c;
 	
+	GdkColor color;
+	gdk_color_parse( "#eeeeee", &color );
+	
 	int file = -1;
 	
 	if( data == NULL )
@@ -157,6 +167,7 @@ static void new( GtkWidget *widget, gpointer data )
 			{
 				n[0] = '\0';
 				gtk_widget_set_sensitive(sudokuw[i][j], TRUE);
+				gtk_widget_modify_bg( sudokuw[i][j], GTK_STATE_NORMAL, &color );
 			}
 			gtk_button_set_label( GTK_BUTTON(sudokuw[i][j]), n );
 		}
