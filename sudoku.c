@@ -15,7 +15,8 @@
 */
 
 #ifdef BUILD_KINDLE
-#define DATA_PATH "/mnt/us/extensions/sudoku/data"
+#define PUZZLE_PATH "/mnt/us/extensions/sudoku/data/puzzles"
+#define SAVE_PATH "/mnt/us/extensions/sudoku/data/saved_sudoku.txt"
 #define GRID_X 60
 #define GRID_Y 60
 #define CMD_X 47
@@ -24,7 +25,8 @@
 #define TOOL_Y 50
 #else
 #ifdef BUILD_PC
-#define DATA_PATH "data"
+#define PUZZLE_PATH "data/puzzles"
+#define SAVE_PATH "data/saved_sudoku.txt"
 #define GRID_X 50
 #define GRID_Y 50
 #define CMD_X 43
@@ -64,7 +66,9 @@ static void selection( GtkWidget *widget, gpointer data )
 {
 	selected_x = (int)((int*)data)[0];
 	selected_y = (int)((int*)data)[1];
-	// g_print("New selection: %i, %i\n", selected_x, selected_y);
+	#ifdef DEBUG
+	g_print("New selection: %i, %i\n", selected_x, selected_y);
+	#endif
 }
 
 // put number in grid cell
@@ -76,17 +80,40 @@ static void put_number( GtkWidget *widget, gpointer data )
 	gtk_button_set_label( GTK_BUTTON( sudokuw[selected_x][selected_y] ), string );
 }
 
+// save current puzzle progress
 static void save( GtkWidget *widget, gpointer data )
 {
-	// TODO
+	FILE *savefile = NULL;
+	int i,j;
+
+	if( current_sudoku == -1 )	// no puzzle to save
+		return;
+	
+	savefile = fopen( SAVE_PATH, "w" );
+	if( !savefile )
+		return;
+	
+	fprintf( savefile, "%s\n0", sudoku_files[current_sudoku] );
+	
+	for( i=0; i<9; i++ )
+	{
+		for( j=0; j<9; j++ )
+		{
+			if( gtk_widget_get_sensitive(sudokuw[i][j]) == TRUE )	// if the cell is editable
+			{
+				if( strcmp( "", gtk_button_get_label(GTK_BUTTON(sudokuw[i][j])) ) != 0 )	// if user wrote something
+				{
+					fprintf( savefile, "%s", gtk_button_get_label( GTK_BUTTON(sudokuw[i][j])) );
+					continue;
+				}
+			}
+			fprintf( savefile, "." );
+		}
+	}
+	fclose( savefile );
 }
 
-static void load( GtkWidget *widget, gpointer data )
-{
-	// TODO
-}
-
-// start a new sudoku
+// start a new random sudoku
 static void new( GtkWidget *widget, gpointer data )
 {
 	FILE *sudoku_file = NULL;
@@ -97,13 +124,22 @@ static void new( GtkWidget *widget, gpointer data )
 	
 	int file = -1;
 	
-	do
+	if( data == NULL )
 	{
-		file = rand()%sudoku_total_files;
-	}while( file == current_sudoku ); // different from the current one
+		do
+		{
+			file = rand()%sudoku_total_files;
+		}while( file == current_sudoku ); // different from the current one
+	}
+	else
+	{
+		file = (int)data;
+	}
 
 	current_sudoku = file;
-	// g_print("New sudoku: %i: %s\n", file, sudoku_files[file]);
+	#ifdef DEBUG
+	g_print("New sudoku: %i: %s\n", file, sudoku_files[file]);
+	#endif
 	
 	// fill the grid
 	sudoku_file = fopen( sudoku_files[file], "r" );
@@ -128,10 +164,52 @@ static void new( GtkWidget *widget, gpointer data )
 	fclose(sudoku_file);
 }
 
+// load saved puzzle progress
+static void load( GtkWidget *widget, gpointer data )
+{
+	int i,j, file = -1;
+	char buffer[256];
+	char c = 0, label[2] = { 0, '\0' };
+	FILE *savefile = fopen( SAVE_PATH, "r" );
+	
+	if( !savefile )
+		return;
+		
+	fscanf( savefile, "%s", buffer );
+	
+	for( i=0; i<sudoku_total_files; i++ )
+		if( strcmp( sudoku_files[i], buffer ) == 0 )
+		{
+			file = i;
+			break;
+		}
+		
+	new( NULL, (gpointer)file );
+	
+	while( c != '0' )
+		c = fgetc( savefile );
+	
+	for( i=0; i<9; i++ )
+		for( j=0; j<9; j++ )
+		{
+			c = fgetc(savefile);
+			if( c != '.' )
+			{
+				label[0] = c;
+				#ifdef DEBUG
+				g_print( "c = %c - pos = %i, %i\n", c, i, j );
+				#endif
+				gtk_button_set_label( GTK_BUTTON(sudokuw[i][j]), label );
+			}
+		}
+}
+
 // quit
 static void quit( GtkWidget *widget, gpointer data )
 {
+	#ifdef DEBUG
 	g_print("Quitting.. Bye\n");
+	#endif
 	gtk_main_quit();
 }
 
@@ -161,14 +239,16 @@ int main( int argc, char *argv[] )
 	struct dirent *ep;
 	
 	// count sudoku files and save paths to them
-	dir = opendir(DATA_PATH);
+	dir = opendir(PUZZLE_PATH);
 	while( ep = readdir(dir) )
 	{
 		if( strcmp(ep->d_name, ".") == 0 || strcmp(ep->d_name, "..") == 0 )
 			continue;
 		sudoku_files[sudoku_total_files] = (char*)malloc(sizeof(char)*256);
-		sprintf( sudoku_files[sudoku_total_files], "%s/%s", DATA_PATH, ep->d_name );
+		sprintf( sudoku_files[sudoku_total_files], "%s/%s", PUZZLE_PATH, ep->d_name );
+		#ifdef DEBUG
 		g_print("%s\n", sudoku_files[sudoku_total_files]);
+		#endif
 		sudoku_total_files++;
 	}
 	closedir(dir);
@@ -192,12 +272,10 @@ int main( int argc, char *argv[] )
 	bLoad = gtk_button_new_with_label( LOAD_BUTTON_TEXT );
 	gtk_widget_set_size_request( bLoad, TOOL_X, TOOL_Y );
 	g_signal_connect (bLoad, "clicked", G_CALLBACK(load), NULL);
-	gtk_widget_set_sensitive(bLoad, FALSE); // TODO
 
 	bSave = gtk_button_new_with_label( SAVE_BUTTON_TEXT );
 	gtk_widget_set_size_request( bSave, TOOL_X, TOOL_Y );
 	g_signal_connect (bSave, "clicked", G_CALLBACK(save), NULL);
-	gtk_widget_set_sensitive(bSave, FALSE); // TODO
 
 	bNew = gtk_button_new_with_label( NEW_BUTTON_TEXT );
 	gtk_widget_set_size_request( bNew, TOOL_X, TOOL_Y );
